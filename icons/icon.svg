@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Head -->
+  <ellipse cx="64" cy="72" rx="48" ry="44" fill="#A4C639"/>
+  <!-- Antennae -->
+  <rect x="32" y="16" width="8" height="28" rx="4" fill="#A4C639" transform="rotate(-20 36 30)"/>
+  <rect x="88" y="16" width="8" height="28" rx="4" fill="#A4C639" transform="rotate(20 92 30)"/>
+  <!-- Eyes -->
+  <circle cx="48" cy="80" r="6" fill="#fff"/>
+  <circle cx="80" cy="80" r="6" fill="#fff"/>
+  <!-- Smile -->
+  <path d="M54 96 Q64 108 74 96" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
