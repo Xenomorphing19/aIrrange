@@ -1,30 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>aIrrange Popup</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aIrrange - Your Prompts Organizer</title>
   <style>
     body {
-      min-width: 250px;
-      min-height: 150px;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 16px;
-      background: #f9f9f9;
+      font-family: 'Comic Sans MS', cursive, sans-serif;
+      width: 350px;
+      max-height: 500px;
+      padding: 15px;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #444;
     }
     h1 {
-      font-size: 1.2em;
-      margin: 0 0 10px 0;
+      margin-top: 0;
+      color: #3D5A80;
+      text-align: center;
+      font-size: 28px;
+    }
+    #fun-description {
+      font-style: italic;
+      margin-bottom: 20px;
+      text-align: center;
+      color: #555;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    li {
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid #d0d0d0;
+      border-radius: 8px;
+      background-color: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    a {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+      text-decoration: none;
+      color: #293241;
+    }
+    .keywords-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .keyword {
+      background-color: #E0FBFC;
+      color: #3D5A80;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      margin-bottom: 15px;
+      background-color: #eef2f5;
+      border-radius: 8px;
+      font-weight: bold;
+      color: #3D5A80;
+    }
+    #extension-toggle {
+      transform: scale(1.3);
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <h1>aIrrange</h1>
-  <p>Welcome to aIrrange! Click the button below to let the magic happen! ✨</p>
-  <button id="greetBtn">Click Me or do whatever!</button>
-  <div id="greeting" style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; display: none;">
-    <p id="greetingText"></p>
+  <div id="fun-description">Arranges whatever you might be interested looking at!</div>
+
+  <div class="toggle-container">
+    <label for="extension-toggle">Are you ready for it?</label>
+    <input type="checkbox" id="extension-toggle">
   </div>
+
+  <ul id="conversations-list">
+    <!-- Conversation items will be added here! -->
+  </ul>
   <script src="popup.js"></script>
 </body>
+</html>
