@@ -7,10 +7,15 @@
     "default_popup": "popup.html"
   },
   "content_scripts": [
-    {
-      "matches": ["https://www.google.com/search*"],
-      "js": ["content.js"]
-    }
+  {
+    "matches": [
+      "https://*.chatgpt.com/*"
+    ],
+    "js": ["content.js"]
+  }
+],
+"host_permissions": [
+    "https://*.chatgpt.com/*"
   ],
   "permissions": ["storage"],
   "background": {
