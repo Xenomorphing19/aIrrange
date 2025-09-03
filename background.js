@@ -106,4 +106,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     saveSearch(query, conversationUrl);
     return true; // Indicates you will send a response asynchronously.
   }
+
+  if (message.type === 'getAllConversations') {
+    console.log("Request received from all.html to get all conversations.");
+    chrome.storage.local.get({ conversations: [] }, (result) => {
+      console.log("Sending conversations back to all.html:", result.conversations);
+      sendResponse({ data: result.conversations });
+    });
+    // *** THIS IS THE CRUCIAL FIX ***
+    // You MUST return true here as well to signal that you will be
+    // sending a response asynchronously.
+    return true;
+  }
 });

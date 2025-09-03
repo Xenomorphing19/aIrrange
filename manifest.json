@@ -1,27 +1,28 @@
 {
   "manifest_version": 3,
   "name": "aIrrange",
-  "version": "1.0",
-  "description": "AI-powered tool for organizing and managing your search results.",
+  "version": "1.2",
+  "description": "Arranges whatever you might be interested looking at!",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/"
+  ],
   "action": {
     "default_popup": "popup.html"
   },
-  "content_scripts": [
-  {
-    "matches": [
-      "https://*.chatgpt.com/*"
-    ],
-    "js": ["content.js"]
-  }
-],
-"host_permissions": [
-    "https://*.chatgpt.com/*"
-  ],
-  "permissions": ["storage"],
   "background": {
     "service_worker": "background.js"
   },
-  "icons": {
-    "128": "icons/icon.svg"
-  }
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["all.html", "all.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
