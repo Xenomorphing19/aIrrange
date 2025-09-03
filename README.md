@@ -24,7 +24,14 @@ It helps you **find, revisit, and search** your chats—no more endless scrollin
 ## 🧑‍💻 How to Use
 
 1. **Install the Extension**  
-   Load this folder as an unpacked extension in `chrome://extensions/`.
+   aIrrange is not yet in the Chrome Web Store, but you can install it in just a few steps:
+   - Download or unzip the aIrrange folder to your computer.
+   - Open Google Chrome.
+   - In the address bar, type `chrome://extensions/` and press Enter.
+   - Turn on the **Developer mode** toggle (top right).
+   - Click the **"Load unpacked"** button.
+   - Select the aIrrange folder you downloaded.
+   - You’ll now see the aIrrange icon in your Chrome toolbar—click it to get started!
 
 2. **Get Your Free Gemini API Key**  
    1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
