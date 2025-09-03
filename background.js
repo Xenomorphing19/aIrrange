@@ -91,6 +91,56 @@ async function saveSearch(query, url) {
   });
 };
 
+async function findBestMatchWithGemini(searchQuery, candidates) {
+  console.log("background.js: AI search ranking initiated.");
+  console.log(`  -> Search Query: "${searchQuery}"`);
+  console.log("  -> Candidates to Rank:", candidates);
+
+  const data = await chrome.storage.local.get('aIrrange_geminiApiKey');
+  const apiKey = data.aIrrange_geminiApiKey;
+  if (!apiKey) {
+    console.warn("  -> No API key found. Aborting AI ranking.");
+    return null;
+  }
+
+  const prompt = `A user is searching for a conversation with the query: "${searchQuery}".
+I have pre-filtered a list of potential conversations based on keywords. Each conversation has a URL and its associated keywords.
+Your task is to analyze this list and identify the single best match. Return ONLY the URL of the best matching conversation and nothing else.
+
+Here is the list of candidates in JSON format:
+${JSON.stringify(candidates, null, 2)}
+
+Best matching URL:`;
+  
+  console.log("  -> Constructed prompt for Gemini API:", prompt);
+
+  const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+  try {
+    console.log("  -> Sending request to Gemini API...");
+    const response = await fetch(GEMINI_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
+    }
+    
+    const responseData = await response.json();
+    console.log("  -> Full Gemini API response:", responseData);
+    
+    const bestUrl = responseData.candidates[0].content.parts[0].text.trim();
+    console.log(`  -> Success! Gemini identified best URL: ${bestUrl}`);
+    return bestUrl;
+
+  } catch (error) {
+    console.error("  -> Error during AI search ranking:", error);
+    return null;
+  }
+};
+
 // The message listener that kicks everything off.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'newSearch') {
@@ -118,4 +168,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // sending a response asynchronously.
     return true;
   }
+
+  if (message.type === 'performAiSearch') {
+  console.log("background.js: Received 'performAiSearch' message.");
+  const { query, candidates } = message.payload;
+  findBestMatchWithGemini(query, candidates).then(bestMatchUrl => {
+    console.log("background.js: Sending best match URL back to all.js:", bestMatchUrl);
+    sendResponse({ bestMatchUrl: bestMatchUrl });
+  });
+  return true; // Crucial for async response
+}
 });

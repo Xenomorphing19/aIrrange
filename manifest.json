@@ -21,7 +21,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["all.html", "all.js"],
+      "resources": ["all.html", "all.js", "all.css"],
       "matches": ["<all_urls>"]
     }
   ]

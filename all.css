@@ -44,3 +44,20 @@ a {
   border-radius: 15px; 
   font-size: 0.9em; 
 }
+.search-container {
+  margin-bottom: 25px;
+  text-align: center;
+}
+#search-bar {
+  width: 80%;
+  padding: 10px;
+  font-size: 1em;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  font-family: 'Comic Sans MS', cursive, sans-serif;
+}
+.highlighted {
+  border: 3px solid #ff69b4 !important; /* Make it pink and important! */
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+}
