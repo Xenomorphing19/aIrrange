@@ -1,84 +1,102 @@
-# aIrrange 🧠✨  
-**Your AI-powered ChatGPT Conversation Organizer!**
+# aIrrange Universal
+
+**Your Universal LLM Second Brain: Local, Private, and AI-Powered.**
+
+aIrrange Universal is a **Chrome Extension (MV3)** that indexes your LLM conversations (currently **ChatGPT** + **Claude**) into a **local searchable database**. It adds fast retrieval (dashboard + omnibox), privacy controls, and exports designed for tools like **Notion** and **Obsidian**.
 
 ---
 
-## 🚀 What is aIrrange?
+## Key Features
 
-aIrrange is a Chrome extension that **automatically organizes your ChatGPT conversations** using AI-generated keywords.  
-It helps you **find, revisit, and search** your chats—no more endless scrolling or lost ideas!
-
----
-
-## 🛠️ Features
-
-- 🔑 **AI Keyword Extraction:** Uses Gemini API (or a smart fallback) to tag your chats with relevant keywords.
-- 🗂️ **Automatic Conversation Capture:** Every time you send a prompt, aIrrange saves it—no clicks needed!
-- 🔍 **AI-Powered Search:** Find your past conversations by keyword or let the AI pick the best match.
-- 🕹️ **Toggle On/Off:** Easily pause or resume capturing from the popup.
-- 🗝️ **Secure API Key Storage:** Your Gemini API key is stored locally and never leaves your browser.
-- 📜 **History at a Glance:** See your latest chats in the popup, or browse all history in a dedicated page.
+- **100% Local Index (Dexie.js / IndexedDB):** Your conversation index lives in IndexedDB for scale and speed.
+- **Privacy Sanitizer:** Prompts are sanitized (emails + phone numbers redacted) before any optional external LLM call.
+- **Universal Provider Support via Adapters:** Site-specific capture logic is implemented using an **Adapter Pattern**.
+- **Omnibox Quick Search:** Type `air <query>` in Chrome’s address bar to search your history.
+- **Context Menu Search:** Select text anywhere → right click → **“Search in aIrrange”**.
+- **Dashboard Search:** Professional multi-field search over **title, summary, tags** with debounce for large histories.
+- **Notion/Obsidian Export:**
+  - **CSV (Notion-friendly)** with BOM + standard property headers.
+  - **Markdown ZIP** with YAML frontmatter (Obsidian-friendly).
 
 ---
 
-## 🧑‍💻 How to Use
+## Setup (Developer Mode)
 
-1. **Install the Extension**  
-   aIrrange is not yet in the Chrome Web Store, but you can install it in just a few steps:
-   - Download or unzip the aIrrange folder to your computer.
-   - Open Google Chrome.
-   - In the address bar, type `chrome://extensions/` and press Enter.
-   - Turn on the **Developer mode** toggle (top right).
-   - Click the **"Load unpacked"** button.
-   - Select the aIrrange folder you downloaded.
-   - You’ll now see the aIrrange icon in your Chrome toolbar—click it to get started!
-
-2. **Get Your Free Gemini API Key**  
-   1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
-   2. Sign in with your Google account.
-   3. Click **"Create API Key"**.
-   4. Copy the generated key.
-
-3. **Add Your Gemini API Key to aIrrange**  
-   - Click the aIrrange extension icon.
-   - Open Settings (gear icon or similar).
-   - Paste your Gemini API key and save.
-
-4. **Chat as Usual on [chatgpt.com](https://chatgpt.com/)**  
-   aIrrange will quietly organize your conversations in the background.
-
-5. **Find Your Chats**  
-   - Click the extension icon to see your latest chats.
-   - Click "See All Your History" for a full searchable list.
+1. Open Chrome → `chrome://extensions/`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select this repository folder
 
 ---
 
-## 🖼️ Screenshots
+## Adding API Keys (Optional)
 
-> TBA
+API keys are stored **locally** in `chrome.storage.local` in an “API Vault” structure.
 
----
+1. Open the extension popup → **Settings**
+2. Choose a provider (Gemini / OpenAI / Anthropic / OpenRouter)
+3. Paste your key and click **Save**
+4. (Optional) choose a **Model** (e.g. `gpt-4o-mini` vs `gpt-4o`)
+5. Click **Test** to validate the key
 
-## ⚡ Pro Tips
-
-- **No API Key?** No problem! aIrrange will still extract keywords using a built-in method.
-- **Privacy First:** All your data stays on your device.
-- **Works Only on ChatGPT:** No accidental captures elsewhere.
-
----
-
-## 🦸‍♂️ Why You'll Love It
-
-- Never lose a great idea again!
-- Instantly search and jump to any past conversation.
-- Let AI do the organizing—so you can focus on creating.
+No key? The extension still works and falls back to local keyword extraction.
 
 ---
 
-## 💡 Get Started Now!
+## How to Use
 
-> _Ready to supercharge your ChatGPT workflow? Install aIrrange and let the AI do the arranging!_
+### 1) Capture
+- Visit `https://chatgpt.com/` or `https://claude.ai/` and chat normally.
+- Prompts are captured via MutationObserver-based adapters (no `setTimeout` heuristics).
+
+### 2) Search
+- **Dashboard:** open “See All Your History” from the popup.
+- **Omnibox:** type `air` in the address bar, press Tab/Space, then type your query.
+- **Right-click:** select any text → **Search in aIrrange**.
+
+### 3) Export
+In the dashboard settings:
+- **Export as Markdown (ZIP)**
+- **Export as CSV** (optimized for Notion import)
 
 ---
 
-**Made with ❤️ for the creators, thinkers, and doers.**
+## Architecture (for contributors)
+
+- **Dexie.js (IndexedDB)** for the local conversation index: `src/db/database.js`
+- **Adapter Pattern** for provider support:
+  - `src/adapters/BaseAdapter.js`
+  - `src/adapters/ChatGPTAdapter.js`
+  - `src/adapters/ClaudeAdapter.js`
+- **Background Service Worker** orchestrates:
+  - prompt sanitization
+  - LLM keyword generation (optional)
+  - omnibox + context menu integration
+
+See also: `memory-bank/` and `WHAT_IT_DOES.md`.
+
+---
+
+## License (MIT)
+
+MIT License
+
+Copyright (c) 2025 Anirudh Arora
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
