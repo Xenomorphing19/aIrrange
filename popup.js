@@ -1,44 +1,148 @@
+import { db } from './src/db/database.js';
+
 document.addEventListener('DOMContentLoaded', () => {
   // --- Element References ---
   const conversationsList = document.getElementById('conversations-list');
   const toggle = document.getElementById('extension-toggle');
+  const providerSelect = document.getElementById('api-provider-select');
   const apiKeyInput = document.getElementById('api-key-input');
+  const modelSelect = document.getElementById('model-select');
   const saveApiKeyButton = document.getElementById('save-api-key');
+  const clearApiKeyButton = document.getElementById('clear-api-key');
+  const testApiKeyButton = document.getElementById('test-api-key');
   const apiKeyStatus = document.getElementById('api-key-status');
 
   // --- Storage Keys ---
   const toggleStorageKey = 'aIrrange_isCapturingEnabled';
-  const apiKeyStorageKey = 'aIrrange_geminiApiKey';
+  const apiVaultKey = 'aIrrange_api_vault';
 
-  // --- API Key Logic ---
-  // Check for a saved key on load and show a status message.
-  chrome.storage.local.get(apiKeyStorageKey, (result) => {
-    if (result[apiKeyStorageKey]) {
-      apiKeyStatus.textContent = "Your API Key is safely stored!";
-      apiKeyStatus.style.color = "green";
+  const defaultVault = {
+    selected: 'gemini',
+    keys: { gemini: '', openai: '', anthropic: '', openrouter: '' },
+    models: { gemini: 'gpt-4o-mini', openai: 'gpt-4o-mini', anthropic: 'gpt-4o-mini', openrouter: 'gpt-4o-mini' }
+  };
+
+  const readVault = async () => {
+    const result = await chrome.storage.local.get(apiVaultKey);
+    const vault = result[apiVaultKey] || defaultVault;
+    vault.keys = vault.keys || {};
+    vault.models = vault.models || {};
+    return {
+      selected: vault.selected || 'gemini',
+      keys: {
+        gemini: vault.keys.gemini || '',
+        openai: vault.keys.openai || '',
+        anthropic: vault.keys.anthropic || '',
+        openrouter: vault.keys.openrouter || ''
+      },
+      models: {
+        gemini: vault.models.gemini || 'gpt-4o-mini',
+        openai: vault.models.openai || 'gpt-4o-mini',
+        anthropic: vault.models.anthropic || 'gpt-4o-mini',
+        openrouter: vault.models.openrouter || 'gpt-4o-mini'
+      }
+    };
+  };
+
+  const writeVault = async (vault) => {
+    await chrome.storage.local.set({ [apiVaultKey]: vault });
+  };
+
+  const setStatus = (text, color) => {
+    apiKeyStatus.textContent = text;
+    apiKeyStatus.style.color = color;
+  };
+
+  // --- API Vault Logic ---
+  const refreshVaultUi = async () => {
+    const vault = await readVault();
+    providerSelect.value = vault.selected;
+    apiKeyInput.value = vault.keys[vault.selected] || '';
+    modelSelect.value = vault.models[vault.selected] || 'gpt-4o-mini';
+
+    if (apiKeyInput.value.trim()) {
+      setStatus('API key is stored for this provider.', 'green');
     } else {
-      apiKeyStatus.textContent = "No API Key found. Using simple keywords.";
-      apiKeyStatus.style.color = "orange";
+      setStatus('No API key set for this provider.', 'orange');
+    }
+  };
+
+  providerSelect.addEventListener('change', async () => {
+    const vault = await readVault();
+    vault.selected = providerSelect.value;
+    await writeVault(vault);
+    await refreshVaultUi();
+  });
+
+  modelSelect.addEventListener('change', async () => {
+    const provider = providerSelect.value;
+    const vault = await readVault();
+    vault.models[provider] = modelSelect.value;
+    await writeVault(vault);
+    setStatus('Model saved.', 'green');
+  });
+
+  saveApiKeyButton.addEventListener('click', async () => {
+    const key = apiKeyInput.value.trim();
+    const provider = providerSelect.value;
+    const vault = await readVault();
+    vault.selected = provider;
+    vault.keys[provider] = key;
+    await writeVault(vault);
+    apiKeyInput.value = '';
+    setStatus('Saved!', 'green');
+    await refreshVaultUi();
+  });
+
+  clearApiKeyButton.addEventListener('click', async () => {
+    const provider = providerSelect.value;
+    const vault = await readVault();
+    vault.keys[provider] = '';
+    await writeVault(vault);
+    apiKeyInput.value = '';
+    setStatus('Cleared key for this provider.', 'orange');
+  });
+
+  testApiKeyButton.addEventListener('click', async () => {
+    const provider = providerSelect.value;
+    const key = apiKeyInput.value.trim();
+    if (!key) {
+      setStatus('Paste an API key first.', 'orange');
+      return;
+    }
+    setStatus('Testing...', '#3D5A80');
+    try {
+      const endpointMap = {
+        gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
+        openai: 'https://api.openai.com/v1/models',
+        anthropic: 'https://api.anthropic.com/v1/models',
+        openrouter: 'https://openrouter.ai/api/v1/models'
+      };
+      const url = endpointMap[provider];
+
+      const headers = { Authorization: `Bearer ${key}` };
+      if (provider === 'anthropic') {
+        // Anthropic uses x-api-key + version header.
+        delete headers.Authorization;
+        headers['x-api-key'] = key;
+        headers['anthropic-version'] = '2023-06-01';
+      }
+
+      const res = await fetch(url, { method: 'GET', headers });
+      if (!res.ok) {
+        const body = await res.text();
+        setStatus(`Invalid key: ${res.status}`, 'red');
+        console.warn(body);
+        return;
+      }
+      setStatus('Success! Key looks valid.', 'green');
+    } catch (e) {
+      setStatus(`Test failed: ${String(e?.message || e)}`, 'red');
     }
   });
 
-  // Save the new key when the user clicks "Save".
-  saveApiKeyButton.addEventListener('click', () => {
-    const apiKey = apiKeyInput.value.trim();
-    if (apiKey) {
-      chrome.storage.local.set({ [apiKeyStorageKey]: apiKey }, () => {
-        apiKeyStatus.textContent = "Hooray! Your key has been saved.";
-        apiKeyStatus.style.color = "green";
-        apiKeyInput.value = ''; // Clear the input
-      });
-    } else {
-      // Allow user to clear the key by saving an empty string
-      chrome.storage.local.remove(apiKeyStorageKey, () => {
-        apiKeyStatus.textContent = "API Key removed. Using simple keywords.";
-        apiKeyStatus.style.color = "orange";
-      });
-    }
-  });
+  // Initial paint
+  refreshVaultUi();
 
   // --- Toggle Logic ---
   // Set the toggle's state based on the saved value.
@@ -50,45 +154,39 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set({ [toggleStorageKey]: toggle.checked });
   });
 
-  // --- Display Latest Conversations Logic ---
-  // Fetch all conversations from storage.
-  chrome.storage.local.get({ conversations: [] }, (result) => {
-    const allConversations = result.conversations;
-    
-    // Get only the first 3 items from the array.
-    const latestConversations = allConversations.slice(0, 3);
-
-    // If there are no conversations, show a message.
-    if (latestConversations.length === 0) {
+  // --- Display Latest Conversations Logic (Dexie / IndexedDB) ---
+  const renderLatest = async () => {
+    const latest = await db.conversations.orderBy('timestamp').reverse().limit(3).toArray();
+    if (latest.length === 0) {
       conversationsList.innerHTML = '<li>Nothing captured yet. Go chat!</li>';
       return;
     }
 
-    // Clear the list before rendering to avoid duplicates.
     conversationsList.innerHTML = '';
-
-    // Loop through the latest 3 conversations and create the HTML for each.
-    latestConversations.forEach(convo => {
+    latest.forEach((convo) => {
       const listItem = document.createElement('li');
-      
+
       const link = document.createElement('a');
-      link.href = convo.url;
+      link.href = String(convo.url || '').includes('/c/') ? convo.url : 'https://chatgpt.com/';
       link.target = '_blank';
-      link.textContent = convo.url.split('/c/')[1] || 'A New Chat';
-      
+      link.textContent = convo.title || (convo.url?.split('/c/')?.[1] || 'Conversation');
+
       const keywordsContainer = document.createElement('div');
       keywordsContainer.className = 'keywords-container';
-      
-      convo.keywords.forEach(keyword => {
+
+      const keywords = Array.isArray(convo.keywords) ? convo.keywords : [];
+      keywords.slice(0, 8).forEach((keyword) => {
         const keywordSpan = document.createElement('span');
         keywordSpan.className = 'keyword';
         keywordSpan.textContent = keyword;
         keywordsContainer.appendChild(keywordSpan);
       });
-      
+
       listItem.appendChild(link);
       listItem.appendChild(keywordsContainer);
       conversationsList.appendChild(listItem);
     });
-  });
+  };
+
+  renderLatest();
 });
