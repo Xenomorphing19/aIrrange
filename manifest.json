@@ -1,27 +1,34 @@
 {
   "manifest_version": 3,
-  "name": "aIrrange",
-  "version": "1.2",
-  "description": "Arranges whatever you might be interested looking at!",
-  "permissions": ["storage"],
+  "name": "aIrrange Universal",
+  "version": "0.1.0",
+  "description": "Indexes LLM conversations locally (privacy-first).",
+  "permissions": ["storage", "unlimitedStorage", "contextMenus"],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/"
+    "https://generativelanguage.googleapis.com/",
+    "https://api.openai.com/",
+    "https://api.anthropic.com/",
+    "https://openrouter.ai/"
   ],
   "action": {
     "default_popup": "popup.html"
   },
+  "omnibox": {
+    "keyword": "air"
+  },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js",
+    "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*"],
-      "js": ["content.js"]
+      "matches": ["https://chatgpt.com/*", "https://claude.ai/*"],
+      "js": ["src/content.bundle.js"]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["all.html", "all.js", "all.css"],
+      "resources": ["all.html", "all.js", "all.css", "popup.html", "popup.js", "vendor/dexie.mjs", "vendor/jszip.min.js"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -1,0 +1,21 @@
+{
+  "name": "airrange",
+  "version": "1.0.0",
+  "description": "**Your AI-powered ChatGPT Conversation Organizer!**",
+  "main": "all.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "esbuild src/content.js --bundle --format=iife --platform=browser --outfile=src/content.bundle.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dexie": "^4.3.0",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.3"
+  }
+}
