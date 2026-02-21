@@ -1,13 +1,14 @@
 import { db } from './src/db/database.js';
 import './vendor/jszip.min.js';
 import { convertToMarkdown, conversationsToNotionCsv } from './src/utils/exportUtils.js';
+import { LLMClient, getDefaultModel } from './src/utils/llmClient.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('all-conversations-list');
   const searchBar = document.getElementById('search-bar');
   const providerSelect = document.getElementById('api-provider-select');
   const apiKeyInput = document.getElementById('api-key-input');
-  const modelSelect = document.getElementById('model-select');
+  const modelSelector = document.getElementById('model-selector');
   const saveApiKeyButton = document.getElementById('save-api-key');
   const testApiKeyButton = document.getElementById('test-api-key');
   const apiKeyStatus = document.getElementById('api-key-status');
@@ -19,28 +20,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const apiVaultKey = 'aIrrange_api_vault';
   const defaultVault = {
     selected: 'gemini',
-    keys: { gemini: '', openai: '', anthropic: '', openrouter: '' },
-    models: { gemini: 'gpt-4o-mini', openai: 'gpt-4o-mini', anthropic: 'gpt-4o-mini', openrouter: 'gpt-4o-mini' }
+    keys: { gemini: '', openai: '', anthropic: '' }
   };
 
   const readVault = async () => {
     const result = await chrome.storage.local.get(apiVaultKey);
     const vault = result[apiVaultKey] || defaultVault;
     vault.keys = vault.keys || {};
-    vault.models = vault.models || {};
     return {
       selected: vault.selected || 'gemini',
       keys: {
         gemini: vault.keys.gemini || '',
         openai: vault.keys.openai || '',
-        anthropic: vault.keys.anthropic || '',
-        openrouter: vault.keys.openrouter || ''
-      },
-      models: {
-        gemini: vault.models.gemini || 'gpt-4o-mini',
-        openai: vault.models.openai || 'gpt-4o-mini',
-        anthropic: vault.models.anthropic || 'gpt-4o-mini',
-        openrouter: vault.models.openrouter || 'gpt-4o-mini'
+        anthropic: vault.keys.anthropic || ''
       }
     };
   };
@@ -58,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const vault = await readVault();
     providerSelect.value = vault.selected;
     apiKeyInput.value = vault.keys[vault.selected] || '';
-    modelSelect.value = vault.models[vault.selected] || 'gpt-4o-mini';
     setStatus(apiKeyInput.value.trim() ? 'Key stored for this provider.' : 'No key for this provider.', apiKeyInput.value.trim() ? 'green' : 'orange');
   };
   /** @type {any[]} */
@@ -72,14 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
     vault.selected = providerSelect.value;
     await writeVault(vault);
     await refreshVaultUi();
-  });
-
-  modelSelect.addEventListener('change', async () => {
-    const provider = providerSelect.value;
-    const vault = await readVault();
-    vault.models[provider] = modelSelect.value;
-    await writeVault(vault);
-    setStatus('Model saved.', 'green');
   });
 
   saveApiKeyButton.addEventListener('click', async () => {
@@ -102,32 +85,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     setStatus('Testing...', '#3D5A80');
     try {
-      const endpointMap = {
-        gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
-        openai: 'https://api.openai.com/v1/models',
-        anthropic: 'https://api.anthropic.com/v1/models',
-        openrouter: 'https://openrouter.ai/api/v1/models'
-      };
-      const url = endpointMap[provider];
-
-      const headers = { Authorization: `Bearer ${key}` };
-      if (provider === 'anthropic') {
-        delete headers.Authorization;
-        headers['x-api-key'] = key;
-        headers['anthropic-version'] = '2023-06-01';
-      }
-
-      const res = await fetch(url, { method: 'GET', headers });
-      if (!res.ok) {
-        const body = await res.text();
-        setStatus(`Invalid key: ${res.status}`, 'red');
-        console.warn(body);
+      const llm = new LLMClient();
+      const models = await llm.getAvailableModels(provider, key);
+      if (!Array.isArray(models) || models.length === 0) {
+        setStatus('Connected, but no models returned.', 'orange');
+        modelSelector.hidden = true;
+        modelSelector.disabled = true;
         return;
       }
-      setStatus('Success! Key looks valid.', 'green');
+
+      modelSelector.innerHTML = '';
+      models.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        modelSelector.appendChild(opt);
+      });
+
+      const defaultModel = getDefaultModel(provider, models) || models[0];
+      modelSelector.value = defaultModel;
+      await chrome.storage.local.set({ [`aIrrange_model_${provider}`]: defaultModel });
+
+      modelSelector.hidden = false;
+      modelSelector.disabled = false;
+      setStatus('✅ Success! Models loaded + default selected.', 'green');
     } catch (e) {
       setStatus(`Test failed: ${String(e?.message || e)}`, 'red');
     }
+  });
+
+  modelSelector?.addEventListener('change', async () => {
+    const provider = providerSelect.value;
+    const v = String(modelSelector.value || '').trim();
+    if (!v) return;
+    await chrome.storage.local.set({ [`aIrrange_model_${provider}`]: v });
+    setStatus('Model saved.', 'green');
   });
 
   refreshVaultUi();
@@ -137,7 +129,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (provider === 'chatgpt') return { label: 'ChatGPT', cls: 'chatgpt' };
     if (provider === 'claude') return { label: 'Claude', cls: 'claude' };
     if (provider === 'openai') return { label: 'OpenAI', cls: 'openai' };
-    if (provider === 'openrouter') return { label: 'OpenRouter', cls: 'openrouter' };
     return { label: provider, cls: 'unknown' };
   };
 

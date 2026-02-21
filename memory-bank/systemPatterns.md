@@ -80,6 +80,18 @@ Each provider adapter:
 - Uses **MutationObserver** to detect SPA route changes or conversation changes.
 - Avoids time-based heuristics.
 
+#### Event delegation pattern (React/SPA resilience)
+For prompt input tracking (live search, topic deviation), adapters must use **event delegation** rather than attaching listeners directly to ephemeral prompt nodes.
+
+Current pattern:
+- Attach capturing listeners on `document.body` for:
+  - `input`
+  - `paste`
+- Filter by prompt selectors:
+  - ChatGPT: `#prompt-textarea`
+  - Claude: `[contenteditable="true"]`
+- For `paste`, wrap the schedule/read in a small flush delay (e.g., `setTimeout(..., 50)`) so React has time to update the DOM.
+
 ### Adapter registry
 Central place that:
 - chooses the correct adapter for a page
@@ -129,3 +141,26 @@ Content scripts may send either:
 - direct event type: `{ type: 'PROMPT_SUBMITTED', payload: ... }`
 
 Background must accept both to avoid dropped persistence.
+
+### Async message rule (MV3)
+Any `chrome.runtime.onMessage` branch that responds asynchronously **must** `return true` synchronously to keep the message channel open.
+This is especially important for LLM-backed checks (e.g., `CHECK_DEVIATION`).
+
+## 6) Injected UI nudges (non-blocking)
+Content scripts may inject small premium toasts anchored near the prompt box:
+
+1) **Déjà Vu Toast** (new chat pages)
+- Shows top 3 similar conversations.
+- Links open safely with `target="_blank" rel="noopener noreferrer"`.
+- Glass-morphism styling, fade-in animation, dismiss button, subtle ⚡ aIrrange branding.
+
+2) **Topic Deviation Toast** (existing chat pages)
+- Triggered by debounced deviation checks.
+- Provides actions: Start New Chat (copies prompt, opens new tab) and Ignore (suppresses re-flagging for the same prompt string).
+
+### Fork strategy (high-reliability)
+For “Start New Chat” flows, prefer **Copy & Redirect** over brittle DOM auto-injection:
+- Copy current draft prompt to clipboard.
+- Force navigation via `window.location.href = <new chat url>`.
+- Add a short-lived landing toast: “⚡ Paste (Ctrl+V) your prompt here!”
+- Use a URL flag handshake (`?airrange_fork=true`) to show the landing nudge, then immediately strip it via `history.replaceState`.

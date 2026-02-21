@@ -47,7 +47,6 @@
         <option value="gemini">Gemini</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option>
-        <option value="openrouter">OpenRouter</option>
       </select>
 
       <label for="api-key-input">API Key:</label>
@@ -60,11 +59,11 @@
         <button id="clear-api-key" style="flex:1;">Clear</button>
       </div>
 
-      <label for="model-select" style="display:block; margin-top: 10px;">Model:</label>
-      <select id="model-select" style="width: 100%; margin-bottom: 10px;">
-        <option value="gpt-4o-mini">gpt-4o-mini</option>
-        <option value="gpt-4o">gpt-4o</option>
+      <label for="model-selector" style="display:block; margin-top: 10px;">Model:</label>
+      <select id="model-selector" style="width: 100%; margin-bottom: 10px;" disabled hidden>
+        <option value="">(Click Test to load models)</option>
       </select>
+
       <p id="api-key-status"></p>
     </div>
   </details>

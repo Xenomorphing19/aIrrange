@@ -119,7 +119,7 @@ Current stored shape (effective):
   id: string,
   url: string,
   title: string,
-  provider: 'chatgpt' | 'claude' | 'openai' | 'openrouter' | 'unknown',
+  provider: 'chatgpt' | 'claude' | 'openai' | 'gemini' | 'anthropic' | 'unknown',
   prompt_snippet: string,
   timestamp: number,
   summary?: string,
@@ -143,20 +143,16 @@ Stored in `chrome.storage.local`:
 
 ```js
 aIrrange_api_vault: {
-  selected: 'gemini' | 'openai' | 'anthropic' | 'openrouter',
+  selected: 'gemini' | 'openai' | 'anthropic',
   keys: {
     gemini: string,
     openai: string,
-    anthropic: string,
-    openrouter: string
-  },
-  models: {
-    gemini: string,
-    openai: string,
-    anthropic: string,
-    openrouter: string
+    anthropic: string
   }
 }
+
+// Per-provider model selection stored separately:
+// aIrrange_model_gemini, aIrrange_model_openai, aIrrange_model_anthropic
 ```
 
 ---

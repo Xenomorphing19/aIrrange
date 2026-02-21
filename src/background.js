@@ -82,11 +82,66 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('PROVIDER_ACTIVE', message.payload);
   }
 
+  if (message?.type === 'LIVE_SEARCH') {
+    const q = String(message?.payload?.query || '').trim();
+    liveSearchConversations(q, 3).then(
+      (matches) => sendResponse({ ok: true, matches }),
+      (err) => sendResponse({ ok: false, error: String(err?.message || err), matches: [] })
+    );
+    return true;
+  }
+
+  if (message?.type === 'CHECK_DEVIATION') {
+    const conversationId = String(message?.payload?.conversationId || '').trim();
+    const currentPrompt = String(message?.payload?.currentPrompt || '').trim();
+    console.log('[DEVIATION DEBUG] Background received request for ID:', conversationId);
+
+    // Chrome async message fix: MUST return true synchronously to keep the channel open.
+    (async () => {
+      try {
+        if (!conversationId || !currentPrompt) {
+          sendResponse({ ok: true, deviated: false });
+          return;
+        }
+
+        const convo = await db.conversations.get(conversationId);
+        console.log('[DEVIATION DEBUG] Dexie lookup result:', convo);
+        const summary = String(convo?.summary || '').trim();
+        if (!convo || !summary) {
+          console.log('[DEVIATION DEBUG] Aborting: No summary.');
+          sendResponse({ ok: true, deviated: false });
+          return;
+        }
+
+        const sanitized = sanitizePrompt(currentPrompt);
+        const llm = new LLMClient();
+        let llmResult;
+        try {
+          llmResult = await llm.checkDeviation({ summary, currentPrompt: sanitized });
+        } catch (error) {
+          console.error('[DEVIATION DEBUG] LLM API crashed:', error);
+          sendResponse({ ok: true, deviated: false });
+          return;
+        }
+        console.log('[DEVIATION DEBUG] LLM Result:', llmResult);
+        sendResponse({ ok: true, deviated: Boolean(llmResult?.deviated) });
+      } catch (error) {
+        console.error('[DEVIATION DEBUG] CHECK_DEVIATION handler crashed:', error);
+        sendResponse({ ok: true, deviated: false });
+      }
+    })();
+
+    return true;
+  }
+
   // Keep as no-op for now; useful for debugging.
   if (message?.type === 'URL_CHANGED') {
     console.log('URL_CHANGED', message.payload);
   }
 });
+
+// NOTE: checkDeviation() helper removed in favor of fully inlined CHECK_DEVIATION handler
+// to avoid message-channel confusion and guarantee sendResponse is always called.
 
 /**
  * @param {any} message
@@ -102,32 +157,75 @@ async function handleAdapterEvent(message, sender) {
   }
 
   if (type === 'PROMPT_SUBMITTED') {
-    // 1) Always upsert base record (prompt snippet + title/url/provider)
-    const base = await upsertConversationBase(payload, message);
-
-    // 2) Sanitize before any external call
-    const sanitized = sanitizePrompt(payload.prompt_snippet || '');
-
-    // 3) Try LLM metadata generation
-    const llm = new LLMClient();
-    let summary = '';
-    let keywords = [];
-    try {
-      const meta = await llm.generateKeywords(sanitized);
-      summary = meta.summary || '';
-      keywords = meta.keywords || [];
-    } catch (e) {
-      // 4) Fallback: local extraction
-      const local = extractKeywordsSimple(sanitized);
-      keywords = Array.from(local).slice(0, 8);
-      summary = base?.title || '';
-      console.warn('LLM metadata unavailable, using local fallback:', e);
+    // Safety: ignore ChatGPT prompts if we don't yet have a real conversation URL.
+    // Prevents creating/updating dummy records for https://chatgpt.com/ landing.
+    if (payload?.provider === 'chatgpt' && (!payload?.url || !String(payload.url).includes('/c/'))) {
+      console.warn('[aIrrange][bg] Ignoring PROMPT_SUBMITTED on ChatGPT landing/non-conversation URL:', payload?.url);
+      return;
     }
 
-    // 5) Update record with intelligence
-    await db.conversations.update(base.id, { summary, keywords });
-    await upsertTagsFromKeywords(keywords);
-    console.log('Updated conversation with metadata', { id: base.id, summary, keywords });
+    // 1) Always upsert base record (prompt snippet + title/url/provider)
+    const base = await upsertConversationBase(payload, message);
+    if (base?.ignored) return;
+
+    // 2) Read existing record to avoid overwriting summary/keywords and to save API costs
+    const existing = await db.conversations.get(base.id);
+    const existingSummary = typeof existing?.summary === 'string' ? existing.summary : '';
+    const existingKeywords = Array.isArray(existing?.keywords) ? existing.keywords : [];
+
+    // 3) Sanitize before any external call
+    const sanitized = sanitizePrompt(payload.prompt_snippet || '');
+
+    /** @type {string} */
+    let summary = existingSummary;
+    /** @type {string[]} */
+    let newKeywords = [];
+
+    // Condition A (New Chat): no record or no summary/keywords -> call LLM
+    const needsLlm = !existing || (!existingSummary && existingKeywords.length === 0);
+    if (needsLlm) {
+      const llm = new LLMClient();
+      try {
+        const meta = await llm.generateKeywords(sanitized);
+        summary = meta.summary || summary || '';
+        newKeywords = Array.isArray(meta.keywords) ? meta.keywords : [];
+      } catch (e) {
+        console.warn('LLM metadata unavailable, using local fallback:', e);
+        newKeywords = Array.from(extractKeywordsSimple(sanitized)).slice(0, 8);
+        if (!summary) summary = base?.title || '';
+      }
+    } else {
+      // Condition B (Existing Chat): do not call LLM; use local keywords only
+      newKeywords = Array.from(extractKeywordsSimple(sanitized)).slice(0, 8);
+    }
+
+    // Guardrail: ensure we always store something useful.
+    if (!Array.isArray(newKeywords) || newKeywords.length === 0) {
+      newKeywords = Array.from(extractKeywordsSimple(sanitized)).slice(0, 8);
+    }
+
+    // Merge, don't replace. Never overwrite existing 1-sentence summary.
+    const mergedKeywords = Array.from(
+      new Set(
+        [...existingKeywords, ...newKeywords]
+          .map((k) => String(k || '').trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 16);
+
+    // 4) Update record with intelligence
+    await db.conversations.update(base.id, {
+      summary: existingSummary || summary,
+      keywords: mergedKeywords
+    });
+    await upsertTagsFromKeywords(mergedKeywords);
+    console.log('Updated conversation with metadata', {
+      id: base.id,
+      usedLlm: needsLlm,
+      summary: existingSummary || summary,
+      newKeywords,
+      mergedKeywords
+    });
   }
 }
 
@@ -178,6 +276,27 @@ async function searchConversations(query, limit) {
   return filtered.slice(0, limit);
 }
 
+async function liveSearchConversations(query, limit) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return [];
+  const all = await db.conversations.orderBy('timestamp').reverse().toArray();
+  const filtered = all.filter((c) => {
+    const title = String(c.title || '').toLowerCase();
+    const summary = String(c.summary || '').toLowerCase();
+    const keywords = Array.isArray(c.keywords) ? c.keywords.map((k) => String(k).toLowerCase()) : [];
+    return title.includes(q) || summary.includes(q) || keywords.some((k) => k.includes(q));
+  });
+  return filtered.slice(0, Number(limit || 3)).map((c) => ({
+    id: c.id,
+    url: c.url,
+    title: c.title,
+    provider: c.provider,
+    summary: c.summary,
+    keywords: c.keywords,
+    timestamp: c.timestamp
+  }));
+}
+
 function escapeXml(s) {
   return String(s || '')
     .replace(/&/g, '&amp;')
@@ -194,6 +313,7 @@ async function upsertTagsFromKeywords(keywords) {
     keywords
       .map((k) => String(k || '').trim())
       .filter(Boolean)
+      .map((label) => label.toLowerCase())
       .map((label) => db.tags.put({ id: label, label }))
   );
 }

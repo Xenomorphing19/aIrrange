@@ -23,6 +23,17 @@ export class ClaudeAdapter extends BaseAdapter {
     this._lastTitle = null;
     this._lastSubmittedPrompt = null;
     this._handleMutations = this._handleMutations.bind(this);
+
+    /** @type {((promptText: string) => void) | null} */
+    this._onInputCb = null;
+    /** @type {boolean} */
+    this._liveInputInstalled = false;
+
+    /** @type {((e: Event) => void) | null} */
+    this._delegatedInputHandler = null;
+
+    /** @type {((e: ClipboardEvent) => void) | null} */
+    this._delegatedPasteHandler = null;
   }
 
   start(emit) {
@@ -31,12 +42,24 @@ export class ClaudeAdapter extends BaseAdapter {
     this._observer = new MutationObserver(this._handleMutations);
     this._observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
     this._patchHistoryForUrlChanges();
+    this._ensureLiveInputListenerInstalled();
+
     this._maybeEmitConversationUpdate('init');
   }
 
   stop() {
     if (this._observer) this._observer.disconnect();
     this._observer = null;
+
+    if (this._delegatedInputHandler) {
+      document.body?.removeEventListener?.('input', this._delegatedInputHandler, true);
+      this._delegatedInputHandler = null;
+    }
+
+    if (this._delegatedPasteHandler) {
+      document.body?.removeEventListener?.('paste', this._delegatedPasteHandler, true);
+      this._delegatedPasteHandler = null;
+    }
   }
 
   getPrompt() {
@@ -64,6 +87,44 @@ export class ClaudeAdapter extends BaseAdapter {
 
   onUrlChange(cb) {
     this._onUrlChangeCb = cb;
+  }
+
+  /**
+   * Debounced prompt-input listener for live search.
+   * @param {(promptText: string) => void} callback
+   */
+  onInputChanged(callback) {
+    if (this._onInputCb) return;
+    this._onInputCb = callback;
+  }
+
+  _ensureLiveInputListenerInstalled() {
+    if (this._liveInputInstalled) return;
+    this._liveInputInstalled = true;
+
+    let timer = null;
+    const schedule = () => {
+      if (!this._onInputCb) return;
+      const text = this.getPrompt() || '';
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => this._onInputCb(text), 500);
+    };
+
+    const isPromptTarget = (t) => t?.getAttribute?.('contenteditable') === 'true' || t?.closest?.('[contenteditable="true"]');
+
+    this._delegatedInputHandler = (e) => {
+      const t = /** @type {any} */ (e.target);
+      if (isPromptTarget(t)) schedule();
+    };
+
+    this._delegatedPasteHandler = (e) => {
+      const t = /** @type {any} */ (e.target);
+      if (!isPromptTarget(t)) return;
+      setTimeout(() => schedule(), 50);
+    };
+
+    document.body?.addEventListener?.('input', this._delegatedInputHandler, true);
+    document.body?.addEventListener?.('paste', this._delegatedPasteHandler, true);
   }
 
   _patchHistoryForUrlChanges() {

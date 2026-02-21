@@ -30,17 +30,15 @@
         <option value="gemini">Gemini</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option>
-        <option value="openrouter">OpenRouter</option>
       </select>
 
       <input type="password" id="api-key-input" placeholder="API key for selected provider">
       <button id="test-api-key">Test</button>
       <button id="save-api-key">Save</button>
+    </div>
 
-      <select id="model-select">
-        <option value="gpt-4o-mini">gpt-4o-mini</option>
-        <option value="gpt-4o">gpt-4o</option>
-      </select>
+    <div class="settingsRow" style="margin-top: 10px;">
+      <select id="model-selector" disabled hidden style="flex: 1; min-width: 240px;"></select>
     </div>
     <p id="api-key-status" style="text-align:center; font-size: 12px;"></p>
 

@@ -48,9 +48,22 @@ The extension should:
 - UI:
   - Popup (latest 3 conversations, provider/key/model vault)
   - Dashboard (card UI, multi-field search, exports, safe delete)
+- Injected in-product UX nudges:
+  - **Déjà Vu** toast on *new chat pages* (shows top 3 similar prior conversations)
+  - **Topic Deviation** toast on *existing chats* (warns when draft prompt diverges from conversation context)
 - Export:
   - Notion-friendly CSV (UTF-8 BOM)
   - Markdown ZIP with YAML frontmatter
+
+## LLM integration (Big 3)
+The extension supports **native API calls** to:
+- **Gemini** (Google Generative Language API, native `generateContent`)
+- **OpenAI** (`/v1/chat/completions`)
+- **Anthropic** (`/v1/messages` with `anthropic-dangerously-allow-browser: true`)
+
+The extension also supports **dynamic model discovery + per-provider model selection**:
+- On “Test Connection”, models are fetched from the provider and a smart default is auto-selected and saved.
+- Stored per provider in `chrome.storage.local` (see Tech Context).
 
 ## Success Criteria
 - Captures and updates conversation index entries without leaking data remotely.

@@ -1,4 +1,5 @@
 import { db } from './src/db/database.js';
+import { LLMClient, getDefaultModel } from './src/utils/llmClient.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // --- Element References ---
@@ -6,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggle = document.getElementById('extension-toggle');
   const providerSelect = document.getElementById('api-provider-select');
   const apiKeyInput = document.getElementById('api-key-input');
-  const modelSelect = document.getElementById('model-select');
+  const modelSelector = document.getElementById('model-selector');
   const saveApiKeyButton = document.getElementById('save-api-key');
   const clearApiKeyButton = document.getElementById('clear-api-key');
   const testApiKeyButton = document.getElementById('test-api-key');
@@ -18,28 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const defaultVault = {
     selected: 'gemini',
-    keys: { gemini: '', openai: '', anthropic: '', openrouter: '' },
-    models: { gemini: 'gpt-4o-mini', openai: 'gpt-4o-mini', anthropic: 'gpt-4o-mini', openrouter: 'gpt-4o-mini' }
+    keys: { gemini: '', openai: '', anthropic: '' }
   };
 
   const readVault = async () => {
     const result = await chrome.storage.local.get(apiVaultKey);
     const vault = result[apiVaultKey] || defaultVault;
     vault.keys = vault.keys || {};
-    vault.models = vault.models || {};
     return {
       selected: vault.selected || 'gemini',
       keys: {
         gemini: vault.keys.gemini || '',
         openai: vault.keys.openai || '',
-        anthropic: vault.keys.anthropic || '',
-        openrouter: vault.keys.openrouter || ''
-      },
-      models: {
-        gemini: vault.models.gemini || 'gpt-4o-mini',
-        openai: vault.models.openai || 'gpt-4o-mini',
-        anthropic: vault.models.anthropic || 'gpt-4o-mini',
-        openrouter: vault.models.openrouter || 'gpt-4o-mini'
+        anthropic: vault.keys.anthropic || ''
       }
     };
   };
@@ -58,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const vault = await readVault();
     providerSelect.value = vault.selected;
     apiKeyInput.value = vault.keys[vault.selected] || '';
-    modelSelect.value = vault.models[vault.selected] || 'gpt-4o-mini';
 
     if (apiKeyInput.value.trim()) {
       setStatus('API key is stored for this provider.', 'green');
@@ -72,14 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
     vault.selected = providerSelect.value;
     await writeVault(vault);
     await refreshVaultUi();
-  });
-
-  modelSelect.addEventListener('change', async () => {
-    const provider = providerSelect.value;
-    const vault = await readVault();
-    vault.models[provider] = modelSelect.value;
-    await writeVault(vault);
-    setStatus('Model saved.', 'green');
   });
 
   saveApiKeyButton.addEventListener('click', async () => {
@@ -112,33 +95,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     setStatus('Testing...', '#3D5A80');
     try {
-      const endpointMap = {
-        gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
-        openai: 'https://api.openai.com/v1/models',
-        anthropic: 'https://api.anthropic.com/v1/models',
-        openrouter: 'https://openrouter.ai/api/v1/models'
-      };
-      const url = endpointMap[provider];
-
-      const headers = { Authorization: `Bearer ${key}` };
-      if (provider === 'anthropic') {
-        // Anthropic uses x-api-key + version header.
-        delete headers.Authorization;
-        headers['x-api-key'] = key;
-        headers['anthropic-version'] = '2023-06-01';
-      }
-
-      const res = await fetch(url, { method: 'GET', headers });
-      if (!res.ok) {
-        const body = await res.text();
-        setStatus(`Invalid key: ${res.status}`, 'red');
-        console.warn(body);
+      const llm = new LLMClient();
+      const models = await llm.getAvailableModels(provider, key);
+      if (!Array.isArray(models) || models.length === 0) {
+        setStatus('Connected, but no models returned.', 'orange');
+        modelSelector.hidden = true;
+        modelSelector.disabled = true;
         return;
       }
-      setStatus('Success! Key looks valid.', 'green');
+
+      // Populate dropdown
+      modelSelector.innerHTML = '';
+      models.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        modelSelector.appendChild(opt);
+      });
+
+      // Auto-select + auto-save default
+      const defaultModel = getDefaultModel(provider, models) || models[0];
+      modelSelector.value = defaultModel;
+      await chrome.storage.local.set({ [`aIrrange_model_${provider}`]: defaultModel });
+
+      modelSelector.hidden = false;
+      modelSelector.disabled = false;
+      setStatus('✅ Success! Models loaded + default selected.', 'green');
     } catch (e) {
       setStatus(`Test failed: ${String(e?.message || e)}`, 'red');
     }
+  });
+
+  // On-change saving
+  modelSelector?.addEventListener('change', async () => {
+    const provider = providerSelect.value;
+    const v = String(modelSelector.value || '').trim();
+    if (!v) return;
+    await chrome.storage.local.set({ [`aIrrange_model_${provider}`]: v });
+    setStatus('Model saved.', 'green');
   });
 
   // Initial paint
