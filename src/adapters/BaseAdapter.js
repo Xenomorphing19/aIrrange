@@ -44,4 +44,15 @@ export class BaseAdapter {
   onUrlChange(callback) {
     throw new Error('onUrlChange() not implemented');
   }
+
+  /**
+   * Register a handler that is called whenever the prompt input changes.
+   * Implementations should debounce.
+   *
+   * @abstract
+   * @param {(promptText: string) => void} callback
+   */
+  onInputChanged(callback) {
+    throw new Error('onInputChanged() not implemented');
+  }
 }

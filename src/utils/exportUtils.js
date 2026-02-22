@@ -12,22 +12,39 @@ export function convertToMarkdown(conversation) {
   const summary = conversation?.summary || '';
   const url = conversation?.url || '';
 
-  const safe = (v) => String(v ?? '').replace(/\r?\n/g, ' ').trim();
-  const safeTitle = safe(title);
-  const safeSummary = safe(summary);
+  const singleLine = (v) => String(v ?? '').replace(/\r?\n/g, ' ').trim();
+  const safeTitle = singleLine(title);
+  const safeSummary = singleLine(summary);
+
+  // YAML frontmatter helpers (Obsidian-friendly)
+  // Always quote scalars to avoid breaking YAML when values contain ':' '[' ']' etc.
+  const yamlQuote = (v) => {
+    const s = singleLine(v);
+    // Escape backslashes + double quotes
+    const escaped = s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `"${escaped}"`;
+  };
+
+  const yamlArray = (arr) => {
+    const items = (Array.isArray(arr) ? arr : [])
+      .map((x) => String(x ?? '').trim())
+      .filter(Boolean)
+      .map((x) => yamlQuote(x));
+    return `[${items.join(', ')}]`;
+  };
 
   return `---
-title: ${safeTitle}
-provider: ${safe(provider)}
-date: ${safe(timestamp)}
-tags: [${keywords.map((k) => safe(k)).join(', ')}]
-summary: ${safeSummary}
-url: ${safe(url)}
+title: ${yamlQuote(safeTitle)}
+provider: ${yamlQuote(provider)}
+date: ${yamlQuote(timestamp)}
+tags: ${yamlArray(keywords)}
+summary: ${yamlQuote(safeSummary)}
+url: ${yamlQuote(url)}
 ---
 # ${safeTitle}
 > **AI Summary:** ${safeSummary}
 
-[View Original Chat](${safe(url)})
+[View Original Chat](${singleLine(url)})
 `;
 }
 
