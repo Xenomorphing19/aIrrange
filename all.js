@@ -17,6 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const tagSidebar = document.getElementById('tag-sidebar');
   const clearHistoryBtn = document.getElementById('clear-history');
 
+  // Re-render when background finishes async keyword generation.
+  // (all.html is an extension page, so chrome.runtime messaging is available.)
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === 'CONVERSATION_UPDATED') {
+      // Re-fetch the chats from Dexie and re-render the UI.
+      loadConversations().then(loadTagsSidebar);
+    }
+  });
+
   const apiVaultKey = 'aIrrange_api_vault';
   const defaultVault = {
     selected: 'gemini',
@@ -269,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
     if (labels.size === 0) return;
-    await db.tags.bulkPut(Array.from(labels).map((label) => ({ label })));
+    await db.tags.bulkPut(Array.from(labels).map((label) => ({ id: label.toLowerCase(), label })));
   };
 
   migrateTagsIfEmpty().then(loadTagsSidebar);
@@ -390,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     await db.tags.clear();
     if (labels.size > 0) {
-      await db.tags.bulkPut(Array.from(labels).map((label) => ({ label })));
+      await db.tags.bulkPut(Array.from(labels).map((label) => ({ id: label.toLowerCase(), label })));
     }
   }
 });

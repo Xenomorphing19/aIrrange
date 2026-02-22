@@ -4,23 +4,6 @@ import { ClaudeAdapter } from './adapters/ClaudeAdapter.js';
 console.log('[DEVIATION DEBUG] Content script loaded. URL:', window.location.href);
 console.log('[aIrrange] Content script loaded. URL:', window.location.href);
 
-function checkLandingFlags() {
-  try {
-    if (window.location.search.includes('airrange_fork=true')) {
-      // Show paste hint immediately on landing.
-      // Ensure adapter/provider detection is ready (showForkPasteHintOnce checks provider).
-      setTimeout(() => showForkPasteHintOnce(), 0);
-      // Strip flag so it doesn't persist on refresh.
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  } catch (e) {
-    console.warn('[aIrrange] checkLandingFlags failed:', e);
-  }
-}
-
-// Run as early as possible
-checkLandingFlags();
-
 /**
  * Content script entry.
  *
@@ -231,43 +214,7 @@ function ensureDejaVuStyles() {
 }
 
 let __airrangeIgnoredDeviationPrompts = new Set();
-let __airrangeForkHintTimer = null;
 
-function showForkPasteHintOnce() {
-  // Small, short-lived toast on new-chat pages.
-  if (!isNewChatPage(adapter?.provider, location.href)) return;
-  if (window.__airrangeForkHintShown) return;
-  window.__airrangeForkHintShown = true;
-
-  ensureDejaVuStyles();
-  const el = document.createElement('div');
-  el.className = 'airrange-dejavu-toast';
-  el.style.position = 'absolute';
-  el.style.left = '0';
-  el.style.right = '0';
-  el.style.bottom = 'calc(100% + 10px)';
-  el.style.zIndex = '2147483647';
-  el.innerHTML = `
-    <div class="airrange-dejavu-row">
-      <div class="airrange-dejavu-left">
-        <div class="airrange-dejavu-title">⚡ Paste (Ctrl+V) your prompt here!</div>
-      </div>
-      <button class="airrange-dejavu-close" type="button" aria-label="Dismiss">✕</button>
-    </div>
-    <div class="airrange-dejavu-branding">⚡ aIrrange</div>
-  `;
-
-  el.querySelector('.airrange-dejavu-close')?.addEventListener('click', () => el.remove());
-
-  const prompt = document.getElementById('prompt-textarea') || document.querySelector('[contenteditable="true"]');
-  const anchor = prompt?.closest?.('form') || prompt?.parentElement || document.body;
-  const anchorEl = /** @type {HTMLElement} */ (anchor);
-  const anchorStyle = window.getComputedStyle(anchorEl);
-  if (anchorStyle.position === 'static') anchorEl.style.position = 'relative';
-  anchorEl.appendChild(el);
-
-  __airrangeForkHintTimer = setTimeout(() => el.remove(), 2000);
-}
 
 function renderDeviationToast({ provider, promptText, onStartNewChat, onIgnore }) {
   // Remove existing deviation toast if any.
@@ -426,14 +373,12 @@ if (!adapter) {
                   btn.disabled = true;
                 }
 
-                // Explicit fork handshake via URL flag.
-                const targetUrl =
-                  adapter.provider === 'chatgpt'
-                    ? 'https://chatgpt.com/?airrange_fork=true'
-                    : adapter.provider === 'claude'
-                      ? 'https://claude.ai/new?airrange_fork=true'
-                      : newChatUrlForProvider(adapter.provider);
+                // Alert & Redirect fork flow (no URL params/hashes; 100% reliable).
+                alert(
+                  'Prompt copied to clipboard!\n\nStarting a new chat... just paste (Ctrl+V) and hit enter.'
+                );
 
+                const targetUrl = newChatUrlForProvider(adapter.provider);
                 console.log('[aIrrange] Redirecting to:', targetUrl);
                 window.location.href = targetUrl;
               },

@@ -1,6 +1,11 @@
 import { db } from './db/database.js';
 import { sanitizePrompt } from './utils/sanitizer.js';
 import { LLMClient } from './utils/llmClient.js';
+import {
+  calculateTrigramSimilarity,
+  generateTrigrams,
+  normalizeAndStem
+} from './utils/searchUtils.js';
 
 console.log('aIrrange Universal background service worker initialized');
 
@@ -189,6 +194,17 @@ async function handleAdapterEvent(message, sender) {
         const meta = await llm.generateKeywords(sanitized);
         summary = meta.summary || summary || '';
         newKeywords = Array.isArray(meta.keywords) ? meta.keywords : [];
+
+        // Persist fuzzy-search helpers (Phase 3)
+        const stemmed_tags = Array.isArray(meta.stemmed_tags) ? meta.stemmed_tags : [];
+        const trigrams = Array.isArray(meta.trigrams) ? meta.trigrams : [];
+
+        await db.conversations.update(base.id, {
+          summary,
+          keywords: newKeywords,
+          stemmed_tags,
+          trigrams
+        });
       } catch (e) {
         console.warn('LLM metadata unavailable, using local fallback:', e);
         newKeywords = Array.from(extractKeywordsSimple(sanitized)).slice(0, 8);
@@ -218,6 +234,12 @@ async function handleAdapterEvent(message, sender) {
       summary: existingSummary || summary,
       keywords: mergedKeywords
     });
+
+    // Broadcast so any open UI (popup/all.html) can re-fetch & re-render.
+    chrome.runtime
+      .sendMessage({ type: 'CONVERSATION_UPDATED', payload: { conversationId: base.id } })
+      .catch(() => {});
+
     await upsertTagsFromKeywords(mergedKeywords);
     console.log('Updated conversation with metadata', {
       id: base.id,
@@ -277,22 +299,55 @@ async function searchConversations(query, limit) {
 }
 
 async function liveSearchConversations(query, limit) {
-  const q = String(query || '').trim().toLowerCase();
+  const q = String(query || '').trim();
   if (!q) return [];
+
+  const stems = normalizeAndStem(q);
+  const queryTrigrams = [...new Set(stems.map((t) => generateTrigrams(t)).flat())];
+
   const all = await db.conversations.orderBy('timestamp').reverse().toArray();
-  const filtered = all.filter((c) => {
-    const title = String(c.title || '').toLowerCase();
-    const summary = String(c.summary || '').toLowerCase();
-    const keywords = Array.isArray(c.keywords) ? c.keywords.map((k) => String(k).toLowerCase()) : [];
-    return title.includes(q) || summary.includes(q) || keywords.some((k) => k.includes(q));
-  });
-  return filtered.slice(0, Number(limit || 3)).map((c) => ({
+
+  /** @type {Array<{score: number, convo: any}>} */
+  const scored = all
+    .map((c) => {
+      const qLower = q.toLowerCase();
+
+      const exactHaystack = [
+        c.title,
+        c.summary,
+        ...(Array.isArray(c.keywords) ? c.keywords : [])
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      const exactMatch = exactHaystack.includes(qLower);
+      const baseline = exactMatch ? 1.0 : 0;
+
+      const convoTrigrams = Array.isArray(c.trigrams) ? c.trigrams : null;
+      if (convoTrigrams && convoTrigrams.length > 0 && queryTrigrams.length > 0) {
+        const score = calculateTrigramSimilarity(queryTrigrams, convoTrigrams);
+        return { score: Math.max(baseline, score), convo: c };
+      }
+
+      // Backward compatibility: older records without trigrams.
+      const title = String(c.title || '').toLowerCase();
+      const summary = String(c.summary || '').toLowerCase();
+      const keywords = Array.isArray(c.keywords) ? c.keywords.map((k) => String(k).toLowerCase()) : [];
+      const hit = title.includes(qLower) || summary.includes(qLower) || keywords.some((k) => k.includes(qLower));
+      return { score: Math.max(baseline, hit ? 0.11 : 0), convo: c };
+    })
+    .filter((x) => x.score >= 0.1)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, Number(limit || 3)).map(({ convo: c }) => ({
     id: c.id,
     url: c.url,
     title: c.title,
     provider: c.provider,
     summary: c.summary,
     keywords: c.keywords,
+    stemmed_tags: c.stemmed_tags,
+    trigrams: c.trigrams,
     timestamp: c.timestamp
   }));
 }

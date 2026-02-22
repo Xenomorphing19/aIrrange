@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const testApiKeyButton = document.getElementById('test-api-key');
   const apiKeyStatus = document.getElementById('api-key-status');
 
+  // Re-render when background finishes async keyword generation.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === 'CONVERSATION_UPDATED') {
+      renderLatest();
+    }
+  });
+
   // --- Storage Keys ---
   const toggleStorageKey = 'aIrrange_isCapturingEnabled';
   const apiVaultKey = 'aIrrange_api_vault';

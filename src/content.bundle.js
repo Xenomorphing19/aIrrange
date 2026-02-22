@@ -476,17 +476,6 @@
   // src/content.js
   console.log("[DEVIATION DEBUG] Content script loaded. URL:", window.location.href);
   console.log("[aIrrange] Content script loaded. URL:", window.location.href);
-  function checkLandingFlags() {
-    try {
-      if (window.location.search.includes("airrange_fork=true")) {
-        setTimeout(() => showForkPasteHintOnce(), 0);
-        window.history.replaceState({}, "", window.location.pathname);
-      }
-    } catch (e) {
-      console.warn("[aIrrange] checkLandingFlags failed:", e);
-    }
-  }
-  checkLandingFlags();
   var AdapterRegistry = class {
     /** @returns {import('./adapters/BaseAdapter.js').BaseAdapter | null} */
     static createForCurrentSite() {
@@ -656,40 +645,6 @@
     document.documentElement.appendChild(style);
   }
   var __airrangeIgnoredDeviationPrompts = /* @__PURE__ */ new Set();
-  var __airrangeForkHintTimer = null;
-  function showForkPasteHintOnce() {
-    if (!isNewChatPage(adapter?.provider, location.href)) return;
-    if (window.__airrangeForkHintShown) return;
-    window.__airrangeForkHintShown = true;
-    ensureDejaVuStyles();
-    const el = document.createElement("div");
-    el.className = "airrange-dejavu-toast";
-    el.style.position = "absolute";
-    el.style.left = "0";
-    el.style.right = "0";
-    el.style.bottom = "calc(100% + 10px)";
-    el.style.zIndex = "2147483647";
-    el.innerHTML = `
-    <div class="airrange-dejavu-row">
-      <div class="airrange-dejavu-left">
-        <div class="airrange-dejavu-title">\u26A1 Paste (Ctrl+V) your prompt here!</div>
-      </div>
-      <button class="airrange-dejavu-close" type="button" aria-label="Dismiss">\u2715</button>
-    </div>
-    <div class="airrange-dejavu-branding">\u26A1 aIrrange</div>
-  `;
-    el.querySelector(".airrange-dejavu-close")?.addEventListener("click", () => el.remove());
-    const prompt = document.getElementById("prompt-textarea") || document.querySelector('[contenteditable="true"]');
-    const anchor = prompt?.closest?.("form") || prompt?.parentElement || document.body;
-    const anchorEl = (
-      /** @type {HTMLElement} */
-      anchor
-    );
-    const anchorStyle = window.getComputedStyle(anchorEl);
-    if (anchorStyle.position === "static") anchorEl.style.position = "relative";
-    anchorEl.appendChild(el);
-    __airrangeForkHintTimer = setTimeout(() => el.remove(), 2e3);
-  }
   function renderDeviationToast({ provider, promptText, onStartNewChat, onIgnore }) {
     document.querySelectorAll(".airrange-deviation-toast").forEach((n) => n.remove());
     ensureDejaVuStyles();
@@ -825,7 +780,10 @@
                     btn.textContent = "Copied! Redirecting...";
                     btn.disabled = true;
                   }
-                  const targetUrl = adapter.provider === "chatgpt" ? "https://chatgpt.com/?airrange_fork=true" : adapter.provider === "claude" ? "https://claude.ai/new?airrange_fork=true" : newChatUrlForProvider(adapter.provider);
+                  alert(
+                    "Prompt copied to clipboard!\n\nStarting a new chat... just paste (Ctrl+V) and hit enter."
+                  );
+                  const targetUrl = newChatUrlForProvider(adapter.provider);
                   console.log("[aIrrange] Redirecting to:", targetUrl);
                   window.location.href = targetUrl;
                 },

@@ -23,6 +23,13 @@ db.version(2).stores({
   tags: 'id, conv_id, label'
 });
 
+// v3: add normalized token indexes for fuzzy search
+// NOTE: MultiEntry indexes use the `*` prefix.
+db.version(3).stores({
+  conversations: 'id, url, provider, timestamp, title, *stemmed_tags, *trigrams',
+  tags: 'id, conv_id, label'
+});
+
 /**
  * @typedef {Object} Conversation
  * @property {string} id
@@ -32,6 +39,8 @@ db.version(2).stores({
  * @property {string} prompt_snippet
  * @property {string=} summary
  * @property {string[]=} keywords
+ * @property {string[]=} stemmed_tags
+ * @property {string[]=} trigrams
  * @property {number} timestamp
  */
 

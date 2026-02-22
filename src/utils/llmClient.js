@@ -1,5 +1,7 @@
 const VAULT_KEY = 'aIrrange_api_vault';
 
+import { generateTrigrams, normalizeAndStem } from './searchUtils.js';
+
 /**
  * Big-3 providers only.
  * @typedef {'gemini'|'openai'|'anthropic'} Provider
@@ -115,7 +117,7 @@ export class LLMClient {
 
   /**
    * @param {string} promptText
-   * @returns {Promise<{summary: string, keywords: string[]}>}
+   * @returns {Promise<{summary: string, keywords: string[], stemmed_tags: string[], trigrams: string[]}>}
    */
   async generateKeywords(promptText) {
     const { provider, apiKey } = await this.getActiveProviderAndKey();
@@ -127,7 +129,21 @@ export class LLMClient {
       'You are a metadata assistant. Summarize the following user intent in one short sentence and extract 3-5 keywords. Return ONLY a JSON object: {"summary": "...", "keywords": ["...", "..."]}';
 
     const content = await callProvider({ provider, apiKey, model: savedModel, system, user: promptText });
-    return parseJsonOnly(content);
+    const parsed = parseJsonOnly(content);
+
+    // Bulletproof stemming/trigram generation: LLMs can return malformed JSON types.
+    let stemmed_tags = [];
+    let trigrams = [];
+    try {
+      const keywords = parsed?.keywords;
+      const safeKeywords = Array.isArray(keywords) ? keywords : [];
+      stemmed_tags = [...new Set(safeKeywords.map((k) => normalizeAndStem(k)).flat())];
+      trigrams = [...new Set(stemmed_tags.map((t) => generateTrigrams(t)).flat())];
+    } catch (error) {
+      console.error('[aIrrange] Failed to generate stems/trigrams:', error);
+    }
+
+    return { ...parsed, stemmed_tags, trigrams };
   }
 
   /**
