@@ -1,8 +1,12 @@
-# aIrrange — Repo Overview (What does this do?)
+# aIrrange Universal — Repo Overview (What does this do?)
 
-This repository contains **a Chrome Extension (Manifest V3)** that **captures your prompts on ChatGPT (chatgpt.com)**, generates **keywords/tags** (optionally via **Google Gemini API**), and stores a lightweight **conversation index** locally so you can **browse/search your past ChatGPT conversation links**.
+This repository contains **a Chrome Extension (Manifest V3)** that indexes your conversations on **ChatGPT (chatgpt.com)** and **Claude (claude.ai)** into a **local searchable database** (Dexie/IndexedDB). It adds:
 
-> In short: it’s a *local, AI-assisted organizer for ChatGPT conversations*.
+- lightweight prompt/conversation metadata capture via provider **adapters**
+- optional LLM-based summaries/keywords (Gemini/OpenAI/Anthropic)
+- fuzzy search primitives (stemming + trigrams) for typo tolerance
+- dashboard + popup UIs
+- exports (Markdown ZIP / Notion CSV)
 
 ---
 
@@ -11,11 +15,20 @@ This repository contains **a Chrome Extension (Manifest V3)** that **captures yo
 This is a browser extension (not a Node project). Key files:
 
 - `manifest.json` — extension configuration (MV3)
-- `background.js` — service worker; does keyword extraction + storage + AI search ranking
-- `content.js` — content script injected on `https://chatgpt.com/*`; captures the user prompt when you press Enter
-- `popup.html` / `popup.js` — the extension popup UI (latest items + toggle + Gemini API key settings)
-- `all.html` / `all.js` / `all.css` — a “full history” page with an AI-assisted search bar
+- `src/background.bundle.js` — bundled background service worker (ESM)
+- `src/content.bundle.js` — bundled content script (IIFE)
+- `popup.html` / `popup.bundle.js` — the extension popup UI
+- `all.html` / `all.bundle.js` / `all.css` — full history dashboard UI
 - `icons/icon.svg` — extension icon
+
+### Bundling note (important)
+MV3 extension contexts do not reliably support **bare npm imports** (e.g. `import { stemmer } from 'stemmer'`) unless bundled.
+
+We bundle these entrypoints with **esbuild**:
+- `src/content.js` → `src/content.bundle.js` (IIFE)
+- `src/background.js` → `src/background.bundle.js` (ESM)
+- `popup.js` → `popup.bundle.js` (ESM)
+- `all.js` → `all.bundle.js` (ESM)
 
 ---
 
@@ -36,11 +49,9 @@ Notes:
 - It does **not** store the full conversation transcript.
 
 ### Storage
-All data is stored in **`chrome.storage.local`**:
+Conversation index is stored in **IndexedDB** via **Dexie** (`src/db/database.js`).
 
-- `conversations` — array of conversation objects `{ url, keywords }`
-- `aIrrange_isCapturingEnabled` — boolean toggle (default `true`)
-- `aIrrange_geminiApiKey` — optional user-provided Gemini API key
+`chrome.storage.local` stores only **settings + API keys/models**.
 
 ---
 
@@ -51,8 +62,7 @@ From `manifest.json`:
 - `permissions: ["storage"]`
   - Needed to store conversations, toggle state, and API key locally.
 
-- `host_permissions: ["https://generativelanguage.googleapis.com/"]`
-  - Needed so the extension can call the Gemini API endpoint.
+- `host_permissions`: includes Gemini/OpenAI/Anthropic endpoints for optional metadata calls.
 
 - `content_scripts.matches: ["https://chatgpt.com/*"]`
   - The prompt-capture logic runs only on ChatGPT.
@@ -66,20 +76,17 @@ Privacy posture (based on code):
 
 ## 4) How it works (data flow)
 
-### A) Capturing a prompt on chatgpt.com (`content.js`)
+### A) Capturing a prompt on chatgpt.com / claude.ai (`src/content.js` + adapters)
 
-1. On page load, `content.js` checks `aIrrange_isCapturingEnabled`.
-2. If enabled:
-   - It listens to `input` events and caches the current prompt box content (`#prompt-textarea`) via `innerText`.
-   - It listens for `keydown` and when you press **Enter** (without Shift) inside the prompt box:
-     - It waits **1.5 seconds** (to allow ChatGPT to generate/navigate to a conversation URL)
-     - It sends a message to the background service worker:
-       - `type: "newSearch"`
-       - `payload: { query: <promptText>, url: window.location.href }`
+The provider adapter emits standardized events like:
+- `PROMPT_SUBMITTED`
+- `CONVERSATION_UPDATE`
 
-### B) Keyword extraction + saving (`background.js`)
+The content script forwards these to the background service worker.
 
-When background receives `newSearch`:
+### B) Keyword extraction + saving (`src/background.js`)
+
+When background receives `PROMPT_SUBMITTED`:
 
 1. It **normalizes** the URL (removes query/hash; ensures ChatGPT `/c/<id>` format).
 2. It generates keywords:
@@ -89,9 +96,11 @@ When background receives `newSearch`:
      - Expects a comma-separated keyword list
    - **Fallback:** `extractKeywordsSimple(query)`
      - Extracts 3+ letter words, lowercases, dedupes via `Set`
-3. It upserts into `chrome.storage.local.conversations`:
-   - If URL already exists: merges keywords (set union) and sorts.
-   - Else: creates a new entry and `unshift`s it to the front (newest first).
+3. It upserts into Dexie `db.conversations`.
+4. It generates/stores:
+   - `summary` + `keywords` (raw tags)
+   - `stemmed_tags` (Porter stems)
+   - `trigrams` (3-char grams for fuzzy matching)
 
 ### C) Popup UI (latest 3) (`popup.html` / `popup.js`)
 
@@ -102,20 +111,15 @@ Popup shows:
 - Latest 3 conversations from `conversations` with their keyword chips
 - Link to open the full history page: `all.html`
 
-### D) Full history + AI-assisted search (`all.html` / `all.js`)
+### D) Full history dashboard (`all.html` / `all.js`)
 
 On load:
 - `all.js` requests all conversations by messaging background:
   - `type: "getAllConversations"`
 
-AI search workflow:
-1. User types a query and presses Enter.
-2. The page pre-filters candidates **locally** by checking if any keyword contains any search term.
-3. If candidates exist and API key is present, it asks background to rank them:
-   - `type: "performAiSearch"`
-   - `payload: { query, candidates }`
-4. Background calls Gemini with a prompt that asks for the **single best matching URL**.
-5. The UI highlights the best matching conversation in the list and scrolls it into view.
+Search is multi-field and (in background LIVE_SEARCH) uses a hybrid scoring:
+- **Exact substring baseline** (never misses exact matches)
+- **Trigram query-overlap similarity** (typo-tolerant bonus)
 
 ---
 
@@ -126,7 +130,7 @@ AI search workflow:
 ```json
 "web_accessible_resources": [
   {
-    "resources": ["all.html", "all.js", "all.css"],
+    "resources": ["all.html", "all.bundle.js", "all.css"],
     "matches": ["<all_urls>"]
   }
 ]
@@ -157,9 +161,9 @@ This allows the extension to open `all.html` (and load its JS/CSS) as an interna
 |------|------|
 | `manifest.json` | Declares permissions, content script, popup, background service worker |
 | `content.js` | Captures prompts on ChatGPT and sends them to background |
-| `background.js` | Extracts keywords, persists `conversations`, serves history + AI ranking |
-| `popup.html` / `popup.js` | Popup UI: toggle, API key, latest 3 conversations |
-| `all.html` / `all.js` / `all.css` | Full history page + AI-assisted search |
+| `src/background.js` | Background logic (bundled to `src/background.bundle.js`) |
+| `popup.html` / `popup.js` | Popup UI (bundled to `popup.bundle.js`) |
+| `all.html` / `all.js` / `all.css` | Dashboard UI (bundled to `all.bundle.js`) |
 | `icons/icon.svg` | Icon |
 
 ---
@@ -167,8 +171,8 @@ This allows the extension to open `all.html` (and load its JS/CSS) as an interna
 ## 8) Known limitations / assumptions (from code)
 
 - **ChatGPT DOM coupling:** It assumes the prompt element id is `prompt-textarea`. If ChatGPT changes its DOM, capture may break.
-- **Timing heuristic:** It waits 1.5s before reading `window.location.href` to capture the new conversation URL; slow networks or UI changes may affect correctness.
-- **Gemini output format:** Keyword extraction assumes Gemini returns a comma-separated list.
+- **Omnibox search** still uses simple `includes()` search today (LIVE_SEARCH is fuzzy-scored).
+- **JSZip warning during build**: bundling `vendor/jszip.min.js` can emit an esbuild warning due to CommonJS patterns in an ESM project; build still succeeds.
 - **No dedupe by content:** Conversations are deduped by normalized URL only.
 
 ---

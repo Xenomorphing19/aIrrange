@@ -123,9 +123,21 @@ Current stored shape (effective):
   prompt_snippet: string,
   timestamp: number,
   summary?: string,
-  keywords?: string[]
+  keywords?: string[],
+  stemmed_tags?: string[],
+  trigrams?: string[]
 }
 ```
+
+### 3.4 Fuzzy-search indexing (v3)
+Dexie schema now has a **v3** upgrade adding MultiEntry indexes:
+
+- `*stemmed_tags`
+- `*trigrams`
+
+These are derived from LLM keywords using:
+- Porter stemming (`stemmer` npm package)
+- trigram generation (3-char n-grams)
 
 ### 3.2 Tags table
 Table: `db.tags`.
@@ -273,6 +285,43 @@ aIrrange_api_vault: {
 ### 6.5 “Phantom card” from landing page
 **Fix:** ignore ChatGPT records without `/c/` URL.
 
+### 6.6 MV3 UI/worker bundling (stemmer module specifier crash)
+**Symptom:**
+- `Failed to resolve module specifier "stemmer"` in background / popup / all.html.
+
+**Cause:**
+- Chrome MV3 contexts cannot resolve bare npm imports without bundling.
+
+**Fix:**
+- Added esbuild bundling for all entrypoints:
+  - `src/content.js` → `src/content.bundle.js` (IIFE)
+  - `src/background.js` → `src/background.bundle.js` (ESM)
+  - `popup.js` → `popup.bundle.js` (ESM)
+  - `all.js` → `all.bundle.js` (ESM)
+- Updated `manifest.json` background worker to `src/background.bundle.js`.
+
+### 6.7 Dexie DataError in all.html (missing primary key)
+**Symptom:**
+- `DexieError: DataError ... key path did not yield a value`.
+
+**Cause:**
+- `db.tags.bulkPut({label})` without the required `id` primary key.
+
+**Fix:**
+- Ensure tags are written with `{ id: label.toLowerCase(), label }`.
+
+### 6.8 UI not updating after async keyword generation
+**Symptom:**
+- First message keywords not visible until refresh.
+
+**Fix:**
+- Background broadcasts `CONVERSATION_UPDATED` after metadata save.
+- Popup + dashboard listen and re-fetch from Dexie to re-render.
+
+### 6.9 Smart search scoring adjustments
+- Changed trigram scoring from Jaccard(union) to **query overlap**.
+- Added exact-match baseline (exact substring match never filtered out).
+
 ---
 
 ## 7) Known Limitations / TODO
@@ -281,8 +330,8 @@ aIrrange_api_vault: {
    - right now tags are unique labels; `conv_id` isn’t used.
 2. **Conversation title extraction** is still heuristic (`document.title`).
 3. **Claude DOM detection** is defensive and may need tuning as their UI changes.
-4. **UI auto-refresh**
-   - popup/dashboard render on open; live updates require refresh.
+4. **Omnibox scoring**
+   - still uses simple `includes()` matching; LIVE_SEARCH is fuzzy-scored.
 
 ---
 
@@ -292,6 +341,12 @@ aIrrange_api_vault: {
 ```bash
 npm run build
 ```
+
+Build outputs:
+- `src/content.bundle.js`
+- `src/background.bundle.js`
+- `popup.bundle.js`
+- `all.bundle.js`
 
 ### Load extension
 Chrome → `chrome://extensions` → Developer mode → Load unpacked.

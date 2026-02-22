@@ -14,6 +14,7 @@ aIrrange Universal is a **Chrome Extension (MV3)** that indexes your LLM convers
 - **Omnibox Quick Search:** Type `air <query>` in Chrome’s address bar to search your history.
 - **Context Menu Search:** Select text anywhere → right click → **“Search in aIrrange”**.
 - **Dashboard Search:** Professional multi-field search over **title, summary, tags** with debounce for large histories.
+- **Fuzzy Search Foundations:** Keywords are normalized via **stemming** and indexed via **trigrams** to enable typo-tolerant matching and better pluralization handling.
 - **Notion/Obsidian Export:**
   - **CSV (Notion-friendly)** with BOM + standard property headers.
   - **Markdown ZIP** with YAML frontmatter (Obsidian-friendly).
@@ -26,6 +27,20 @@ aIrrange Universal is a **Chrome Extension (MV3)** that indexes your LLM convers
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select this repository folder
+
+### Build (required)
+This project uses **esbuild** to bundle MV3 entrypoints so the extension can use npm deps like `stemmer`.
+
+```bash
+npm install
+npm run build
+```
+
+Bundled outputs:
+- `src/content.bundle.js` (content script)
+- `src/background.bundle.js` (service worker)
+- `popup.bundle.js` (popup UI)
+- `all.bundle.js` (dashboard UI)
 
 ---
 
@@ -54,6 +69,10 @@ No key? The extension still works and falls back to local keyword extraction.
 - **Omnibox:** type `air` in the address bar, press Tab/Space, then type your query.
 - **Right-click:** select any text → **Search in aIrrange**.
 
+Search scoring behavior:
+- Exact substring matches are always included (baseline score).
+- Trigram query-overlap similarity provides typo tolerance and better partial matching.
+
 ### 3) Export
 In the dashboard settings:
 - **Export as Markdown (ZIP)**
@@ -72,6 +91,9 @@ In the dashboard settings:
   - prompt sanitization
   - LLM keyword generation (optional)
   - omnibox + context menu integration
+
+### MV3 module resolution (why bundling is required)
+Chrome extension pages/service workers cannot resolve bare npm module specifiers at runtime. We bundle all entrypoints (background/popup/dashboard/content) so imports like `import { stemmer } from 'stemmer'` work.
 
 See also: `memory-bank/` and `WHAT_IT_DOES.md`.
 

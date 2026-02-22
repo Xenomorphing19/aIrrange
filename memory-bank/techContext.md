@@ -19,9 +19,16 @@
 
 ## Build / Bundling
 - Content scripts cannot be ES modules, so we bundle `src/content.js` → `src/content.bundle.js`.
+- MV3 service worker and extension pages also cannot reliably resolve bare npm imports at runtime, so we bundle them as well.
 - Bundler: `esbuild` (dev dependency)
 - Command:
   - `npm run build`
+
+Bundled entrypoints:
+- `src/content.js` → `src/content.bundle.js` (IIFE)
+- `src/background.js` → `src/background.bundle.js` (ESM; referenced by manifest)
+- `popup.js` → `popup.bundle.js` (ESM; referenced by popup.html)
+- `all.js` → `all.bundle.js` (ESM; referenced by all.html)
 
 ## LLM Provider API Routing (Big 3, native)
 LLM calls are made from the background service worker (and settings UI for testing) using provider-native endpoints.
@@ -77,9 +84,10 @@ To avoid bare module specifier resolution issues at runtime (MV3), we vendor:
 - (Optional future) `chrome.webNavigation` for navigation awareness
 
 ## Fork redirect + landing nudge
-The “Start New Chat” action uses a URL-flag handshake:
-- Redirect target includes `?airrange_fork=true`
-- On landing, the content script shows a short “Paste (Ctrl+V)” toast and immediately strips the flag via `history.replaceState`.
+The “Start New Chat” action uses an **Alert & Redirect** flow for maximum reliability:
+- Copy current prompt to clipboard
+- Show a browser `alert()` instructing the user to paste
+- Redirect to a clean new-chat URL (no query/hash handshake)
 
 ## Extension packaging constraints
 - MV3 service workers do not have DOM access.
